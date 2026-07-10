@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import toast from "react-hot-toast";
 import { Sparkles, FileText, Users, Activity, Search, ChevronLeft } from "lucide-react";
 import { useBoard } from "../hooks/useBoard";
+import { useAuth } from "../context/AuthContext";
 import { useLayout } from "../components/layout/AppLayout";
 import { aiApi } from "../lib/api";
 import { PRIORITIES } from "../lib/utils";
@@ -22,6 +23,7 @@ import ActivityFeed from "../components/ActivityFeed";
 
 const BoardPage = () => {
   const { boardId } = useParams();
+  const { user: currentUser } = useAuth();
   const { openCreateBoard } = useLayout();
   const b = useBoard(boardId);
 
@@ -185,6 +187,7 @@ const BoardPage = () => {
         members={b.members}
         actions={b}
         onBreakdown={handleBreakdown}
+        currentUser={currentUser}
       />
       <AIGenerateModal
         open={aiGen.open}

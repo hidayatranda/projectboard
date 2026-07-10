@@ -1,110 +1,278 @@
-import { useMemo, useState } from "react";
-import { Search, Users, Crown } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
-import { useLayout } from "../components/layout/AppLayout";
-import { useWorkspace } from "../hooks/useWorkspace";
+import { useState } from "react";
+import { Mail, Plus, Trash2, Shield, User, Clock } from "lucide-react";
+import toast from "react-hot-toast";
 import Topbar from "../components/layout/Topbar";
+import Button from "../components/ui/Button";
 import Avatar from "../components/ui/Avatar";
-import { cn } from "../lib/utils";
+import { relativeTime } from "../lib/utils";
 
-const roleTone = (role) =>
-  role === "owner"
-    ? "bg-brand-50 text-brand-700"
-    : role === "admin"
-    ? "bg-[#FBF1E2] text-[#c28a3a]"
-    : "bg-surface-2 text-muted";
+const TEAM_MEMBERS = [
+  {
+    id: "u-alex",
+    name: "Alex Rivera",
+    email: "alex@timetoprogram.com",
+    role: "admin",
+    joined_at: new Date(Date.now() - 60 * 86400000).toISOString(),
+    status: "active",
+  },
+  {
+    id: "u-maya",
+    name: "Maya Chen",
+    email: "maya@timetoprogram.com",
+    role: "member",
+    joined_at: new Date(Date.now() - 45 * 86400000).toISOString(),
+    status: "active",
+  },
+  {
+    id: "u-diego",
+    name: "Diego Santos",
+    email: "diego@timetoprogram.com",
+    role: "member",
+    joined_at: new Date(Date.now() - 30 * 86400000).toISOString(),
+    status: "active",
+  },
+  {
+    id: "u-priya",
+    name: "Priya Nair",
+    email: "priya@timetoprogram.com",
+    role: "member",
+    joined_at: new Date(Date.now() - 20 * 86400000).toISOString(),
+    status: "active",
+  },
+  {
+    id: "u-sam",
+    name: "Sam Okafor",
+    email: "sam@timetoprogram.com",
+    role: "member",
+    joined_at: new Date(Date.now() - 15 * 86400000).toISOString(),
+    status: "inactive",
+  },
+];
+
+const RoleSelect = ({ value, onChange, disabled = false }) => (
+  <select
+    value={value}
+    onChange={onChange}
+    disabled={disabled}
+    className="rounded-lg border border-line bg-surface px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/20 disabled:opacity-50"
+  >
+    <option value="admin">Admin</option>
+    <option value="member">Member</option>
+    <option value="viewer">Viewer</option>
+  </select>
+);
+
+const MemberCard = ({ member, onRemove, onRoleChange, isCurrentUser }) => (
+  <div className="flex items-center justify-between rounded-xl border border-line bg-surface p-4 transition-all hover:shadow-[var(--shadow-soft)]">
+    <div className="flex items-center gap-3">
+      <Avatar name={member.name} id={member.id} size="md" />
+      <div className="flex-1">
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold text-ink">{member.name}</h3>
+          {isCurrentUser && (
+            <span className="rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-700">
+              You
+            </span>
+          )}
+          {member.status === "active" ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-green-600" />
+              Active
+            </span>
+          ) : (
+            <span className="rounded-full bg-gray-500/10 px-2 py-0.5 text-xs font-medium text-gray-600">
+              Inactive
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-muted">
+          <Mail className="h-3 w-3" />
+          {member.email}
+        </div>
+        <div className="flex items-center gap-2 text-xs text-faint mt-1">
+          <Clock className="h-3 w-3" />
+          Joined {relativeTime(member.joined_at)}
+        </div>
+      </div>
+    </div>
+
+    <div className="flex items-center gap-2">
+      <RoleSelect
+        value={member.role}
+        onChange={(e) => {
+          onRoleChange(member.id, e.target.value);
+          toast.success(`${member.name}'s role updated`);
+        }}
+        disabled={isCurrentUser}
+      />
+      {!isCurrentUser && (
+        <button
+          onClick={() => {
+            if (window.confirm(`Remove ${member.name} from the team?`)) {
+              onRemove(member.id);
+              toast.success(`${member.name} removed from team`);
+            }
+          }}
+          className="flex items-center justify-center h-10 w-10 rounded-lg text-red-600 hover:bg-red-500/10 transition-colors"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  </div>
+);
 
 const Team = () => {
-  const { user } = useAuth();
-  const { openCreateBoard } = useLayout();
-  const { members, loading } = useWorkspace();
-  const [search, setSearch] = useState("");
+  const [members, setMembers] = useState(TEAM_MEMBERS);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [showInviteForm, setShowInviteForm] = useState(false);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    const sorted = [...members].sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-    if (!q) return sorted;
-    return sorted.filter(
-      (m) => m.name?.toLowerCase().includes(q) || m.email?.toLowerCase().includes(q)
+  const handleInvite = (e) => {
+    e.preventDefault();
+    if (!inviteEmail.trim()) {
+      toast.error("Please enter an email address");
+      return;
+    }
+    if (members.some((m) => m.email === inviteEmail)) {
+      toast.error("This person is already on your team");
+      return;
+    }
+
+    const newMember = {
+      id: `u-${Math.random().toString(36).slice(2, 9)}`,
+      name: inviteEmail.split("@")[0],
+      email: inviteEmail,
+      role: "member",
+      joined_at: new Date().toISOString(),
+      status: "pending",
+    };
+
+    setMembers([...members, newMember]);
+    setInviteEmail("");
+    setShowInviteForm(false);
+    toast.success(`Invitation sent to ${inviteEmail}`);
+  };
+
+  const handleRemove = (memberId) => {
+    setMembers(members.filter((m) => m.id !== memberId));
+  };
+
+  const handleRoleChange = (memberId, newRole) => {
+    setMembers(
+      members.map((m) => (m.id === memberId ? { ...m, role: newRole } : m))
     );
-  }, [members, search]);
+  };
 
-  const owners = members.filter((m) => m.role === "owner").length;
+  const activeCount = members.filter((m) => m.status === "active").length;
+  const adminCount = members.filter((m) => m.role === "admin").length;
 
   return (
     <>
-      <Topbar title="Team" subtitle="People across your boards" onCreateBoard={openCreateBoard} />
+      <Topbar title="Team" subtitle="Manage workspace members and permissions" />
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1600px] px-6 py-8 md:px-8">
-          {/* Header row */}
-          <div className="mb-6 flex flex-wrap items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-surface-2 px-3 py-1 text-xs font-medium tabular text-muted">
-                {members.length} {members.length === 1 ? "person" : "people"}
-              </span>
-              {owners > 0 && (
-                <span className="rounded-full bg-surface-2 px-3 py-1 text-xs font-medium tabular text-muted">
-                  {owners} {owners === 1 ? "owner" : "owners"}
-                </span>
-              )}
-            </div>
-            <div className="relative ml-auto">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search people"
-                className="h-9 w-56 rounded-full border border-line bg-surface pl-9 pr-4 text-xs shadow-[var(--shadow-card)] outline-none transition-all duration-200 focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/15"
-              />
+        <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
+          {/* Header with stats */}
+          <div className="mb-8">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="rounded-xl border border-line bg-surface p-4">
+                <p className="text-xs font-semibold text-faint uppercase tracking-wide">Total Members</p>
+                <p className="mt-2 text-2xl font-bold text-ink">{members.length}</p>
+              </div>
+              <div className="rounded-xl border border-line bg-surface p-4">
+                <p className="text-xs font-semibold text-faint uppercase tracking-wide">Active Now</p>
+                <p className="mt-2 text-2xl font-bold text-green-600">{activeCount}</p>
+              </div>
+              <div className="rounded-xl border border-line bg-surface p-4">
+                <p className="text-xs font-semibold text-faint uppercase tracking-wide">Admins</p>
+                <p className="mt-2 text-2xl font-bold text-blue-600">{adminCount}</p>
+              </div>
             </div>
           </div>
 
-          {loading ? (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {Array.from({ length: 8 }).map((_, i) => <div key={i} className="skeleton h-44 rounded-3xl" />)}
-            </div>
-          ) : members.length === 0 ? (
-            <div className="card flex flex-col items-center justify-center gap-3 rounded-3xl py-20 text-center">
-              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-50 text-brand-500">
-                <Users className="h-7 w-7" />
-              </div>
-              <div>
-                <h3 className="font-display text-lg font-semibold tracking-tight">No teammates yet</h3>
-                <p className="mt-1.5 max-w-sm text-sm leading-relaxed text-muted">
-                  Invite people to a board and they’ll appear here.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filtered.map((m) => (
-                <div
-                  key={m.id}
-                  className="flex flex-col items-center rounded-3xl border border-line bg-surface p-6 text-center shadow-[var(--shadow-card)] transition-shadow duration-300 hover:shadow-[var(--shadow-soft)]"
-                >
-                  <Avatar name={m.name} id={m.id} src={m.avatar_url} size="lg" className="h-16 w-16 text-lg" />
-                  <p className="mt-3 flex items-center gap-1.5 font-display text-base font-semibold tracking-tight">
-                    {m.name}
-                    {m.id === user?.id && <span className="text-[11px] font-medium text-faint">(You)</span>}
-                  </p>
-                  <p className="mt-0.5 max-w-full truncate text-xs text-muted">{m.email}</p>
-                  <span
-                    className={cn(
-                      "mt-3 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium capitalize",
-                      roleTone(m.role)
-                    )}
+          {/* Invite section */}
+          <div className="mb-8">
+            {!showInviteForm ? (
+              <Button onClick={() => setShowInviteForm(true)} className="gap-2">
+                <Plus className="h-4 w-4" />
+                Invite Team Member
+              </Button>
+            ) : (
+              <form onSubmit={handleInvite} className="space-y-3 rounded-xl border border-line bg-surface-2 p-4">
+                <div className="flex gap-2">
+                  <input
+                    type="email"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    placeholder="Enter email address..."
+                    className="flex-1 rounded-lg border border-line bg-surface px-4 py-2.5 text-sm text-ink outline-none transition-colors focus:border-primary focus:ring-1 focus:ring-primary/20"
+                    autoFocus
+                  />
+                  <Button type="submit">Send Invite</Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowInviteForm(false)}
                   >
-                    {m.role === "owner" && <Crown className="h-3 w-3" />}
-                    {m.role || "member"}
-                  </span>
-                  <p className="mt-3 border-t pt-3 text-[11px] text-faint" style={{ width: "100%" }}>
-                    On {m.boards.length} {m.boards.length === 1 ? "board" : "boards"}
-                  </p>
+                    Cancel
+                  </Button>
                 </div>
+              </form>
+            )}
+          </div>
+
+          {/* Members list */}
+          <div className="space-y-3">
+            <h2 className="text-lg font-semibold text-ink">Team Members</h2>
+            <div className="space-y-2">
+              {members.map((member) => (
+                <MemberCard
+                  key={member.id}
+                  member={member}
+                  onRemove={handleRemove}
+                  onRoleChange={handleRoleChange}
+                  isCurrentUser={member.id === "u-alex"}
+                />
               ))}
             </div>
-          )}
+          </div>
+
+          {/* Roles info */}
+          <div className="mt-12 rounded-xl border border-line bg-surface-2 p-6">
+            <h3 className="text-sm font-semibold text-ink mb-4 flex items-center gap-2">
+              <Shield className="h-4 w-4" />
+              Role Permissions
+            </h3>
+            <div className="space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-blue-500/10 p-2">
+                  <Shield className="h-4 w-4 text-blue-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-ink">Admin</p>
+                  <p className="text-xs text-muted">Full access to all boards and team settings</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-green-500/10 p-2">
+                  <User className="h-4 w-4 text-green-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-ink">Member</p>
+                  <p className="text-xs text-muted">Can create and edit boards, manage tasks</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-gray-500/10 p-2">
+                  <User className="h-4 w-4 text-gray-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-ink">Viewer</p>
+                  <p className="text-xs text-muted">Can view boards and tasks, no editing rights</p>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </>
